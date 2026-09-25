@@ -26,7 +26,7 @@ DEFAULT_BASE_URL = "https://api.xiangxinai.cn"
 DEFAULT_MODEL = "xiangxin-latest"
 """默认模型名。 / Default model name."""
 
-DEFAULT_TIMEOUT = 30.0
+DEFAULT_TIMEOUT = 120.0  # 长 state（32k token）+ 多问题的请求可达约 60 秒
 """单次 HTTP 操作的默认超时（秒）。 / Default timeout per HTTP operation, in seconds."""
 
 REQUEST_ID_HEADER = "x-request-id"

@@ -137,8 +137,8 @@ class XiangxinClient:
         model: 默认模型，默认 ``xiangxin-latest``（可用 ``XIANGXIN_DEFAULT_MODEL`` 覆盖）。
             / Default model, ``xiangxin-latest`` unless ``XIANGXIN_DEFAULT_MODEL`` is set.
         retry: 重试策略，传 ``RetryPolicy(max_retries=0)`` 关闭重试。 / Retry policy.
-        timeout: 单次 HTTP 操作超时（秒或 ``httpx.Timeout``），默认 30 秒。
-            / Per-operation timeout (seconds or ``httpx.Timeout``), default 30s.
+        timeout: 单次 HTTP 操作超时（秒或 ``httpx.Timeout``），默认 120 秒。
+            / Per-operation timeout (seconds or ``httpx.Timeout``), default 120s.
         headers: 附加请求头。 / Extra request headers.
         transport: 自定义 ``httpx.BaseTransport``（测试或代理用）。 / Custom transport.
         http_client: 自带的 ``httpx.Client``，与 ``transport`` 互斥；关闭 SDK 客户端时一并关闭。

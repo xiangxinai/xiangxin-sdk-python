@@ -169,7 +169,7 @@ except APIError as e:
 from xiangxin import RetryPolicy, XiangxinClient
 
 client = XiangxinClient(
-    timeout=10.0,                                   # 单次 HTTP 超时（秒），默认 30
+    timeout=10.0,                                   # 单次 HTTP 超时（秒），默认 120
     retry=RetryPolicy(max_retries=4, backoff_max=4.0),
 )
 client.system_one(state, questions, retry=RetryPolicy(max_retries=0), timeout=5.0)  # 单次覆盖
