@@ -21,13 +21,20 @@ Example::
     )
     resp.answers["is_urgent"].noul
     resp.usage.input_tokens
+
+条件反射（``xiangxin-reflex``）是同一接口下的另一个模型家族：毫秒级、固定耗时，
+可以用 ``client.reflexes.create(...)`` 拿自己的标注数据练，再以 ``model=reflex_model(name)`` 调用。
+
+Reflexes (``xiangxin-reflex``) are a second model family behind the same API: millisecond,
+fixed-latency models you can train on your own labels with ``client.reflexes.create(...)``.
 """
 
 from . import constants
 from ._base import RawResponse
-from ._client import AsyncModels, AsyncXiangxinClient, Models, XiangxinClient
+from ._client import AsyncModels, AsyncReflexes, AsyncXiangxinClient, Models, Reflexes, XiangxinClient
 from ._logging import setup_logging_from_env
 from ._version import __version__
+from .constants import REFLEX_MODEL, S1_MODEL, reflex_model
 from .exceptions import (
     APIConnectionError,
     APIError,
@@ -35,13 +42,16 @@ from .exceptions import (
     APITimeoutError,
     AuthenticationError,
     BadRequestError,
+    ConflictError,
     InsufficientBalanceError,
     InternalServerError,
     NotFoundError,
     OverloadedError,
     PermissionDeniedError,
     RateLimitError,
+    RequestTooLargeError,
     UnprocessableEntityError,
+    WaitTimeoutError,
     XiangxinError,
 )
 from .retries import RetryPolicy
@@ -61,6 +71,14 @@ from .types import (
     Question,
     QuestionDict,
     Questions,
+    REFLEX_FINAL_STATUSES,
+    Reflex,
+    ReflexEvaluation,
+    ReflexExample,
+    ReflexLabel,
+    ReflexMetrics,
+    ReflexQuestionMetrics,
+    ReflexStatus,
     Score,
     ScoreAnswer,
     ScoreDict,
@@ -79,6 +97,8 @@ __all__ = [
     "AsyncXiangxinClient",
     "Models",
     "AsyncModels",
+    "Reflexes",
+    "AsyncReflexes",
     "RawResponse",
     "RetryPolicy",
     # questions
@@ -104,6 +124,18 @@ __all__ = [
     "SystemOneResponse",
     "ModelInfo",
     "ListModelsResponse",
+    # reflexes
+    "S1_MODEL",
+    "REFLEX_MODEL",
+    "reflex_model",
+    "Reflex",
+    "ReflexMetrics",
+    "ReflexEvaluation",
+    "ReflexQuestionMetrics",
+    "ReflexExample",
+    "ReflexLabel",
+    "ReflexStatus",
+    "REFLEX_FINAL_STATUSES",
     # errors
     "XiangxinError",
     "APIError",
@@ -112,6 +144,8 @@ __all__ = [
     "InsufficientBalanceError",
     "PermissionDeniedError",
     "NotFoundError",
+    "ConflictError",
+    "RequestTooLargeError",
     "UnprocessableEntityError",
     "RateLimitError",
     "OverloadedError",
@@ -119,4 +153,5 @@ __all__ = [
     "APIResponseValidationError",
     "APIConnectionError",
     "APITimeoutError",
+    "WaitTimeoutError",
 ]

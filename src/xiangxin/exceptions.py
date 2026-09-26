@@ -9,13 +9,16 @@
     │   ├── InsufficientBalanceError    402
     │   ├── PermissionDeniedError       403
     │   ├── NotFoundError               404
+    │   ├── ConflictError               409
+    │   ├── RequestTooLargeError        413
     │   ├── UnprocessableEntityError    422
     │   ├── RateLimitError              429
     │   ├── OverloadedError             529
     │   ├── InternalServerError         其他 5xx / other 5xx
     │   └── APIResponseValidationError  2xx 但响应体结构不符 / malformed 2xx body
-    └── APIConnectionError              没有拿到 HTTP 响应 / no HTTP response
-        └── APITimeoutError             请求超时 / request timed out
+    ├── APIConnectionError              没有拿到 HTTP 响应 / no HTTP response
+    │   └── APITimeoutError             请求超时 / request timed out
+    └── WaitTimeoutError                ``reflexes.wait`` 等待超时 / wait deadline exceeded
 """
 
 from __future__ import annotations
@@ -36,6 +39,8 @@ __all__ = [
     "InsufficientBalanceError",
     "PermissionDeniedError",
     "NotFoundError",
+    "ConflictError",
+    "RequestTooLargeError",
     "UnprocessableEntityError",
     "RateLimitError",
     "OverloadedError",
@@ -43,6 +48,7 @@ __all__ = [
     "APIResponseValidationError",
     "APIConnectionError",
     "APITimeoutError",
+    "WaitTimeoutError",
 ]
 
 
@@ -137,6 +143,24 @@ class NotFoundError(APIError):
     """资源不存在，例如未知模型（404）。 / Resource not found, e.g. unknown model (404)."""
 
 
+class ConflictError(APIError):
+    """与资源当前状态冲突（409），不会自动重试。 / Conflicts with the resource's state (409); never retried.
+
+    ``detail`` 取值 / ``detail`` values:
+
+    - ``reflex_not_ready``：反射首次训练尚未完成，暂不能推理。 / The reflex has no trained version yet.
+    - ``reflex_busy``：该反射正在训练，不能再次提交。 / The reflex is already training.
+    - ``too_many_reflexes: …``：已达每个组织的反射数量上限。 / Per-organization reflex limit reached.
+    """
+
+
+class RequestTooLargeError(APIError):
+    """请求体过大（413），例如练反射的样本超过 50MB。
+
+    The request body is too large (413), e.g. reflex examples above 50MB.
+    """
+
+
 class UnprocessableEntityError(APIError):
     """请求未通过服务端校验，例如选项过多或超出 token 上限（422）。
 
@@ -188,12 +212,28 @@ class APITimeoutError(APIConnectionError, TimeoutError):
     """请求超过了配置的超时时间。 / The request exceeded its configured timeout."""
 
 
+class WaitTimeoutError(XiangxinError, TimeoutError):
+    """``reflexes.wait`` 在 ``timeout`` 内没有等到结束状态；训练本身不受影响。
+
+    ``reflexes.wait`` gave up before the reflex reached a final status; training continues.
+
+    Attributes:
+        reflex: 最后一次查询到的反射。 / The reflex as last observed.
+    """
+
+    def __init__(self, message: str, reflex: Any = None) -> None:
+        super().__init__(message)
+        self.reflex = reflex
+
+
 _STATUS_TO_ERROR: dict[int, type[APIError]] = {
     400: BadRequestError,
     401: AuthenticationError,
     402: InsufficientBalanceError,
     403: PermissionDeniedError,
     404: NotFoundError,
+    409: ConflictError,
+    413: RequestTooLargeError,
     422: UnprocessableEntityError,
     429: RateLimitError,
     529: OverloadedError,

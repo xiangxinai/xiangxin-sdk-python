@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from urllib.parse import quote
 from typing import Any, Generic, TypeVar, Union
 
 import httpx
@@ -25,6 +26,7 @@ Timeout = Union[float, httpx.Timeout]
 
 SYSTEM_ONE_PATH = "/v1/systemone"
 MODELS_PATH = "/v1/models"
+REFLEXES_PATH = "/v1/reflexes"
 USER_AGENT = f"xiangxin-python/{__version__}"
 
 
@@ -125,6 +127,49 @@ def build_system_one_body(
         "model": model,
         "questions": {name: serialize_question(name, q) for name, q in questions.items()},
     }
+    if extra_body:
+        body.update(extra_body)
+    return body
+
+
+def reflex_path(name: str, suffix: str = "") -> str:
+    """``/v1/reflexes/{name}{suffix}``，名字做 URL 转义。 / Reflex URL path with the name escaped."""
+    if not isinstance(name, str) or not name:
+        raise XiangxinError("反射名不能为空 / reflex name must be a non-empty string")
+    return f"{REFLEXES_PATH}/{quote(name, safe='')}{suffix}"
+
+
+def build_reflex_body(
+    name: str,
+    questions: Mapping[str, Any],
+    examples: Sequence[Mapping[str, Any]],
+    description: str | None,
+    extra_body: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """构造 ``POST /v1/reflexes`` 的请求体；条数与名字格式由服务端校验。
+
+    Build the ``POST /v1/reflexes`` body; counts and name format are validated server-side.
+    """
+    if not isinstance(name, str) or not name:
+        raise XiangxinError("反射名不能为空 / reflex name must be a non-empty string")
+    if not isinstance(questions, Mapping) or not questions:
+        raise XiangxinError("questions 必须是非空映射 / questions must be a non-empty mapping")
+    if isinstance(examples, (str, bytes)) or not isinstance(examples, Sequence) or not examples:
+        raise XiangxinError("examples 必须是非空列表 / examples must be a non-empty list")
+    wire_examples: list[dict[str, Any]] = []
+    for i, example in enumerate(examples):
+        if not isinstance(example, Mapping) or "state" not in example or not isinstance(example.get("answers"), Mapping):
+            raise XiangxinError(
+                f"第 {i} 条样本须为 {{state, answers}} 字典 / example {i} must be a dict with state and answers"
+            )
+        wire_examples.append({**example, "answers": dict(example["answers"])})
+    body: dict[str, Any] = {
+        "name": name,
+        "questions": {qname: serialize_question(qname, q) for qname, q in questions.items()},
+        "examples": wire_examples,
+    }
+    if description is not None:
+        body["description"] = description
     if extra_body:
         body.update(extra_body)
     return body

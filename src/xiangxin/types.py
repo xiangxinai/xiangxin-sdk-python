@@ -1,7 +1,7 @@
-"""请求与响应类型：问题（Noul / Choice / Score）、答案、用量与模型列表。
+"""请求与响应类型：问题（Noul / Choice / Score）、答案、用量、模型列表与条件反射。
 
 Request and response types: questions (Noul / Choice / Score), answers,
-token usage and the model listing.
+token usage, the model listing and reflexes.
 """
 
 from __future__ import annotations
@@ -40,6 +40,15 @@ __all__ = [
     "SystemOneResponse",
     "ModelInfo",
     "ListModelsResponse",
+    # reflexes
+    "ReflexLabel",
+    "ReflexExample",
+    "ReflexStatus",
+    "REFLEX_FINAL_STATUSES",
+    "ReflexQuestionMetrics",
+    "ReflexEvaluation",
+    "ReflexMetrics",
+    "Reflex",
 ]
 
 logger = logging.getLogger("xiangxin")
@@ -426,3 +435,153 @@ class ListModelsResponse(XiangxinResponse):
     models: list[ModelInfo]
     """可用模型列表。 / Available models."""
 
+
+
+# ---------------------------------------------------------------------------
+# 条件反射 / Reflexes
+# ---------------------------------------------------------------------------
+
+ReflexLabel: TypeAlias = Union[bool, str, int]
+"""一条标注：Noul 为 ``True/False``，Choice 为选项名，Score 为档位下标（从 0 起）。
+
+One label: ``True/False`` for noul, the option label for choice, the level index for score.
+"""
+
+
+class ReflexExample(TypedDict):
+    """练反射用的一条样本。 / One training example for a reflex.
+
+    ``answers`` 可以只标部分问题。 / ``answers`` may label only some of the questions.
+
+    Example::
+
+        {"state": "我被重复扣费了两次", "answers": {"department": "billing", "is_urgent": True}}
+    """
+
+    state: JSONContent
+    """样本内容。 / The example's state."""
+    answers: Mapping[str, ReflexLabel]
+    """问题名 → 标注。 / Question name → label."""
+
+
+ReflexStatus: TypeAlias = Literal["queued", "training", "ready", "failed", "cancelled"]
+"""反射状态。 / Reflex status."""
+
+REFLEX_FINAL_STATUSES: frozenset[str] = frozenset({"ready", "failed", "cancelled"})
+"""训练结束的状态，``reflexes.wait`` 等到其中之一即返回。 / Final statuses awaited by ``reflexes.wait``."""
+
+_METRICS_CONFIG = ConfigDict(frozen=True, extra="ignore")
+
+
+class ReflexQuestionMetrics(BaseModel):
+    """单个问题上的成绩。 / Scores on one question."""
+
+    model_config = _METRICS_CONFIG
+
+    accuracy: float | None = None
+    """准确率（0–1）。 / Accuracy (0–1)."""
+    n: int | None = None
+    """参与评测的标注条数。 / Number of labels evaluated."""
+
+
+class ReflexEvaluation(BaseModel):
+    """一组评测成绩（练之前或练之后）。 / One set of evaluation scores (before or after training)."""
+
+    model_config = _METRICS_CONFIG
+
+    accuracy: float | None = None
+    """准确率（0–1）。 / Accuracy (0–1)."""
+    log_loss: float | None = None
+    """对数损失，越小越好。 / Log loss; lower is better."""
+    ece: float | None = None
+    """期望校准误差，越小越好。 / Expected calibration error; lower is better."""
+    per_question: dict[str, ReflexQuestionMetrics] = Field(default_factory=dict)
+    """问题名 → 该问题的成绩。 / Question name → its scores."""
+
+
+class ReflexMetrics(BaseModel):
+    """训练结果。样本 ≥ 20 条时按留出的验证集计，否则按训练集计（见 ``evaluated_on``）。
+
+    Training results, measured on a held-out validation split when there are at
+    least 20 examples, otherwise on the training set (see ``evaluated_on``).
+    """
+
+    model_config = _METRICS_CONFIG
+
+    examples: int | None = None
+    """样本总数。 / Total examples."""
+    train_examples: int | None = None
+    """训练集条数。 / Training examples."""
+    val_examples: int | None = None
+    """验证集条数。 / Validation examples."""
+    evaluated_on: str | None = None
+    """``"val"`` 或 ``"train"``。 / ``"val"`` or ``"train"``."""
+    epochs: float | None = None
+    """实际训练轮数。 / Epochs trained."""
+    duration_s: float | None = None
+    """训练耗时（秒）。 / Training time in seconds."""
+    before: ReflexEvaluation | None = None
+    """基础条件反射在同一评测集上的成绩（练之前）。 / Base reflex on the same split (before training)."""
+    after: ReflexEvaluation | None = None
+    """练之后的成绩。 / Scores after training."""
+
+
+class Reflex(XiangxinResponse):
+    """一个练出来的条件反射。推理时把 :attr:`model` 传给 ``system_one`` 的 ``model``。
+
+    A trained reflex. Pass :attr:`model` as ``model=`` to ``system_one`` for inference.
+    """
+
+    id: str
+    """反射 ID，如 ``rf_…``。 / Reflex ID, e.g. ``rf_…``."""
+    name: str
+    """反射名。 / Reflex name."""
+    model: str = ""
+    """推理用模型名 ``xiangxin-reflex:<name>``。 / Model name for inference."""
+    description: str = ""
+    """说明。 / Description."""
+    status: str
+    """``queued`` / ``training`` / ``ready`` / ``failed`` / ``cancelled``（见 :data:`ReflexStatus`）。"""
+    usable: bool = False
+    """已有练好的版本可用于推理（重练期间旧版本照常可用）。
+
+    A trained version is available for inference (the old one stays live during a retrain).
+    """
+    progress: float = 0.0
+    """当前训练进度（0–1）。 / Progress of the current training (0–1)."""
+    stage: str | None = None
+    """当前阶段。 / Current stage."""
+    queue_position: int | None = None
+    """排队位置（仅 ``queued`` 时）。 / Queue position, only while ``queued``."""
+    questions: dict[str, Any] = Field(default_factory=dict)
+    """问题定义。 / Question definitions."""
+    examples: int | None = None
+    """最近一次提交的样本条数。 / Number of examples last submitted."""
+    metrics: ReflexMetrics | None = None
+    """最近一次成功训练的成绩。 / Results of the last successful training."""
+    error: str | None = None
+    """失败原因。 / Failure reason."""
+    created_at: str | None = None
+    """创建时间（ISO 8601）。 / Creation time (ISO 8601)."""
+    updated_at: str | None = None
+    """最近一次状态变化时间。 / Time of the last status change."""
+    trained_at: str | None = None
+    """最近一次训练完成时间。 / Time the last training finished."""
+
+    @property
+    def done(self) -> bool:
+        """训练已结束（``ready`` / ``failed`` / ``cancelled``）。 / Training reached a final status."""
+        return self.status in REFLEX_FINAL_STATUSES
+
+
+class ListReflexesResponse(XiangxinResponse):
+    """``GET /v1/reflexes`` 的响应。 / Response of ``GET /v1/reflexes``."""
+
+    reflexes: list[Reflex]
+    """本组织的反射，新建的在前。 / The organization's reflexes, newest first."""
+
+
+class DeleteReflexResponse(XiangxinResponse):
+    """``DELETE /v1/reflexes/{name}`` 的响应。 / Response of ``DELETE /v1/reflexes/{name}``."""
+
+    ok: bool = True
