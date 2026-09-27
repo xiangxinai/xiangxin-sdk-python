@@ -356,7 +356,7 @@ class SystemOneResponse(XiangxinResponse):
     """
 
     model: str
-    """实际响应的模型版本，如 ``xiangxin-1.0.0``。 / Resolved model, e.g. ``xiangxin-1.0.0``."""
+    """实际响应的模型版本，如 ``xiangxin-s1-1.0.0``。 / Resolved model, e.g. ``xiangxin-s1-1.0.0``."""
     answers: dict[str, Answer]
     """全部答案，键为问题名。 / All answers keyed by question name."""
     usage: Usage = Field(default_factory=Usage)

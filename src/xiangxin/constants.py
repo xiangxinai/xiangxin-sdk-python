@@ -25,7 +25,7 @@ Logging level environment variable (debug/info/warning/error/off), applied once 
 DEFAULT_BASE_URL = "https://api.xiangxinai.cn"
 """默认 API 根地址。 / Default API root URL."""
 
-DEFAULT_MODEL = "xiangxin-latest"
+DEFAULT_MODEL = "xiangxin-s1-latest"
 """默认模型名。 / Default model name."""
 
 DEFAULT_TIMEOUT = 120.0  # 长 state（32k token）+ 多问题的请求可达约 60 秒
@@ -38,7 +38,7 @@ Minimum timeout for ``reflexes.create`` in seconds; large example uploads take l
 """
 
 S1_MODEL = "xiangxin-s1"
-"""系统一模型（象信一号）的别名。 / Alias of the System One model (象信一号)."""
+"""系统一模型（象信·系统一）的别名。 / Alias of the System One model (象信·系统一)."""
 
 REFLEX_MODEL = "xiangxin-reflex"
 """基础条件反射模型的别名。 / Alias of the base reflex model."""

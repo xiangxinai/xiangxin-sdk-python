@@ -31,7 +31,7 @@ def test_models_are_frozen() -> None:
 def test_direct_response_validation() -> None:
     resp = SystemOneResponse.model_validate(
         {
-            "model": "xiangxin-1.0.0",
+            "model": "xiangxin-s1-1.0.0",
             "answers": {
                 "n": {"type": "noul", "noul": 0.1},
                 "c": {"type": "choice", "choice": "a", "probabilities": {"a": 1.0}, "confidence": 1.0},

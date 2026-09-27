@@ -1,6 +1,6 @@
 """象信 AI 官方 Python SDK。 / Official Python SDK for 象信 AI.
 
-象信一号是一个"系统一"模型：给定状态（state）与一组带类型的问题
+象信·系统一是一个"系统一"模型：给定状态（state）与一组带类型的问题
 （Noul 是非题 / Choice 单选题 / Score 打分题），一次前向即返回带校准概率的结构化答案。
 
 Xiangxin-1 is a "System One" model: given a state and typed questions

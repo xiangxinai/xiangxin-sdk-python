@@ -1,8 +1,8 @@
 # 象信 AI Python SDK
 
-`xiangxin-sdk` 是 [象信 AI](https://xiangxinai.cn) 的官方 Python SDK，用于调用**象信一号**系统一模型。
+`xiangxin-sdk` 是 [象信 AI](https://xiangxinai.cn) 的官方 Python SDK，用于调用**象信·系统一**系统一模型。
 
-象信一号不生成文本：你给它一段**状态（state）**和一组**带类型的问题**，它一次前向就返回带校准概率的结构化答案。问题有三种原语：
+象信·系统一不生成文本：你给它一段**状态（state）**和一组**带类型的问题**，它一次前向就返回带校准概率的结构化答案。问题有三种原语：
 
 | 原语 | 用途 | 答案字段 |
 |---|---|---|
@@ -59,7 +59,7 @@ print(resp.answers["is_urgent"].noul)          # 0.95
 print(resp.answers["department"].choice)       # "billing"
 print(resp.answers["department"].confidence)   # 0.81
 print(resp.answers["frustration"].score)       # 1.05
-print(resp.usage.input_tokens, resp.model)     # 296 xiangxin-1.0.0
+print(resp.usage.input_tokens, resp.model)     # 296 xiangxin-s1-1.0.0
 ```
 
 也可以按类型分组读取：`resp.nouls`、`resp.choices`、`resp.scores`。
@@ -119,13 +119,13 @@ for m in client.models.list().models:
     print(m.name, m.description, m.release_date)
 ```
 
-默认模型为 `xiangxin-latest`。可在创建客户端时指定 `model=`，或在单次调用时传入 `model=` 覆盖。
+默认模型为 `xiangxin-s1-latest`。可在创建客户端时指定 `model=`，或在单次调用时传入 `model=` 覆盖。
 
 两个模型家族共用同一个 `system_one` 接口，只换 `model`：
 
 | 模型 | 常量 | 说明 |
 |---|---|---|
-| `xiangxin-s1` | `S1_MODEL` | 系统一（象信一号），有世界知识，零样本即可判断 |
+| `xiangxin-s1` | `S1_MODEL` | 系统一（象信·系统一），有世界知识，零样本即可判断 |
 | `xiangxin-reflex` | `REFLEX_MODEL` | 基础条件反射，毫秒级、固定耗时，价格为系统一的 1/100 |
 | `xiangxin-reflex:<名字>` | `reflex_model("<名字>")` | 用你自己的数据练出来的反射 |
 
@@ -234,7 +234,7 @@ logging.getLogger("xiangxin").setLevel(logging.INFO)
 |---|---|---|
 | `XIANGXIN_API_KEY` | API 密钥（必填） | — |
 | `XIANGXIN_BASE_URL` | API 根地址 | `https://api.xiangxinai.cn` |
-| `XIANGXIN_DEFAULT_MODEL` | 默认模型 | `xiangxin-latest` |
+| `XIANGXIN_DEFAULT_MODEL` | 默认模型 | `xiangxin-s1-latest` |
 | `XIANGXIN_LOG` | 日志级别 | 不设置 |
 
 显式传入的参数优先于环境变量。

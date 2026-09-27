@@ -201,8 +201,8 @@ class XiangxinClient:
         api_key: API 密钥，默认读取 ``XIANGXIN_API_KEY``。 / API key; defaults to ``XIANGXIN_API_KEY``.
         base_url: API 根地址，默认读取 ``XIANGXIN_BASE_URL``，否则 ``https://api.xiangxinai.cn``。
             / API root; defaults to ``XIANGXIN_BASE_URL`` or ``https://api.xiangxinai.cn``.
-        model: 默认模型，默认 ``xiangxin-latest``（可用 ``XIANGXIN_DEFAULT_MODEL`` 覆盖）。
-            / Default model, ``xiangxin-latest`` unless ``XIANGXIN_DEFAULT_MODEL`` is set.
+        model: 默认模型，默认 ``xiangxin-s1-latest``（可用 ``XIANGXIN_DEFAULT_MODEL`` 覆盖）。
+            / Default model, ``xiangxin-s1-latest`` unless ``XIANGXIN_DEFAULT_MODEL`` is set.
         retry: 重试策略，传 ``RetryPolicy(max_retries=0)`` 关闭重试。 / Retry policy.
         timeout: 单次 HTTP 操作超时（秒或 ``httpx.Timeout``），默认 120 秒。
             / Per-operation timeout (seconds or ``httpx.Timeout``), default 120s.

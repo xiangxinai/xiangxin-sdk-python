@@ -125,7 +125,7 @@ def test_retry_on_429_honors_retry_after(sleeps: list[float]) -> None:
     )
     with make_client() as client:
         resp = client.system_one("s", {"a": Noul()})
-    assert resp.model == "xiangxin-1.0.0"
+    assert resp.model == "xiangxin-s1-1.0.0"
     assert route.call_count == 3
     assert sleeps == [3.0, 0.25]
 
@@ -211,10 +211,10 @@ def test_connection_errors_are_retried(sleeps: list[float]) -> None:
         calls["n"] += 1
         if calls["n"] == 1:
             raise httpx.ConnectError("reset", request=request)
-        return httpx.Response(200, json={"models": [{"name": "xiangxin-latest", "description": "d"}]})
+        return httpx.Response(200, json={"models": [{"name": "xiangxin-s1-latest", "description": "d"}]})
 
     with make_client(transport=httpx.MockTransport(handler)) as client:
-        assert client.models.list().models[0].name == "xiangxin-latest"
+        assert client.models.list().models[0].name == "xiangxin-s1-latest"
     assert calls["n"] == 2 and len(sleeps) == 1
 
 
