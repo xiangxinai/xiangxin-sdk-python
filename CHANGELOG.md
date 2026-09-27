@@ -1,6 +1,6 @@
 # 更新日志
 
-## 0.2.0 — 未发布
+## 0.2.0 — 2026-09-27
 
 - 默认模型为 `xiangxin-s1-latest`（条件反射对应 `xiangxin-reflex-latest`），响应里的版本号为 `xiangxin-s1-1.0.0` / `xiangxin-reflex-1.0.0`。
 - 新增**条件反射**（`xiangxin-reflex`）支持：`client.reflexes.create / list / get / cancel / delete / wait`（同步与异步），类型 `Reflex`、`ReflexMetrics`（`before` / `after` 的 `accuracy`、`log_loss`、`ece`、`per_question`）、`ReflexExample`。
