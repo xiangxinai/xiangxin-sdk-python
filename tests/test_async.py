@@ -102,6 +102,7 @@ async def test_async_retry_429_then_529(sleeps: list[float]) -> None:
     assert resp.answers["is_urgent"].noul == 0.95
     assert route.call_count == 3
     assert sleeps == [1.5, 0.4]
+    assert [c.request.headers.get("x-xiangxin-retry-count") for c in route.calls] == [None, "1", "2"]
 
 
 @respx.mock

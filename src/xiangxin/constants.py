@@ -62,6 +62,8 @@ def reflex_model(name: str) -> str:
 
 
 REQUEST_ID_HEADER = "x-request-id"
+RETRY_COUNT_HEADER = "x-xiangxin-retry-count"
+"""重试时附带的第几次重试（1 起），服务端据此区分首发与重试。 / Retry number sent on retries."""
 """服务端返回的请求 ID 响应头。 / Response header carrying the request ID."""
 
 MODEL_MS_HEADER = "x-xiangxin-model-ms"
@@ -83,6 +85,7 @@ __all__ = [
     "REFLEX_MODEL",
     "reflex_model",
     "REQUEST_ID_HEADER",
+    "RETRY_COUNT_HEADER",
     "MODEL_MS_HEADER",
     "TOTAL_MS_HEADER",
 ]

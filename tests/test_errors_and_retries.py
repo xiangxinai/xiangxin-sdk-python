@@ -187,12 +187,40 @@ def test_per_call_retry_override(sleeps: list[float]) -> None:
 
 
 @respx.mock
-def test_retry_after_beyond_cap_is_not_retried(sleeps: list[float]) -> None:
+def test_retry_after_beyond_cap_falls_back_to_backoff(sleeps: list[float]) -> None:
+    """建议等 1 小时（超过 60 秒上限）：不采纳，按指数退避照常重试（与 TypeSafe JS SDK 一致）。"""
     route = respx.post(URL).respond(429, headers={"retry-after": "3600"})
     with make_client() as client:
         with pytest.raises(RateLimitError):
             client.system_one("s", {"a": Noul()})
-    assert route.call_count == 1
+    assert route.call_count == 3
+    assert 0.375 <= sleeps[0] <= 0.5 and 0.75 <= sleeps[1] <= 1.0
+
+
+@respx.mock
+@pytest.mark.parametrize("status", [408, 501, 503, 520, 529])
+def test_default_retries_408_and_all_5xx(sleeps: list[float], status: int) -> None:
+    route = respx.post(URL).mock(side_effect=[httpx.Response(status, json={"detail": "x"}),
+                                              httpx.Response(200, json=SAMPLE_RESPONSE)])
+    with make_client() as client:
+        client.system_one("s", {"a": Noul()})
+    assert route.call_count == 2
+
+
+@respx.mock
+def test_retries_carry_retry_count_header(sleeps: list[float]) -> None:
+    route = respx.post(URL).mock(side_effect=[httpx.Response(529, json={"detail": "x"}),
+                                              httpx.Response(529, json={"detail": "x"}),
+                                              httpx.Response(200, json=SAMPLE_RESPONSE)])
+    with make_client() as client:
+        client.system_one("s", {"a": Noul()})
+    counts = [c.request.headers.get("x-xiangxin-retry-count") for c in route.calls]
+    assert counts == [None, "1", "2"]
+
+
+def test_backoff_caps_at_five_seconds() -> None:
+    p = RetryPolicy(backoff_jitter=0)
+    assert [p.backoff(i) for i in range(6)] == [0.5, 1.0, 2.0, 4.0, 5.0, 5.0]
 
 
 @respx.mock

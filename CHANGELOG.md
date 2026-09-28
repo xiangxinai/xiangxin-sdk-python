@@ -1,5 +1,13 @@
 # 更新日志
 
+## 0.2.1 — 2026-09-28
+
+重试策略与 TypeSafe 官方 SDK 对齐：
+- 默认重试的状态码从 `429 / 500 / 502 / 503 / 504 / 529` 扩大为 `408`、`429` 与**所有 5xx**。
+- 指数退避单次上限从 8 秒改为 **5 秒**（0.5 秒起翻倍，随机扣减最多 25%）。
+- 服务端建议的等待（`retry-after-ms` / `retry-after`）超过 `max_retry_after`（默认 60 秒）时，不再直接放弃，而是改按指数退避重试。
+- 重试请求带 `x-xiangxin-retry-count: n`（新增常量 `RETRY_COUNT_HEADER`），首发请求不带；服务端据此区分首发与重试。
+
 ## 0.2.0 — 2026-09-27
 
 - 默认模型为 `xiangxin-s1-latest`（条件反射对应 `xiangxin-reflex-latest`），响应里的版本号为 `xiangxin-s1-1.0.0` / `xiangxin-reflex-1.0.0`。

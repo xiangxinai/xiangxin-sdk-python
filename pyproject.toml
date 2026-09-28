@@ -1,6 +1,6 @@
 [project]
 name = "xiangxin-sdk"
-version = "0.2.0"
+version = "0.2.1"
 description = "象信 AI 官方 Python SDK —— 调用象信·系统一模型（System One API）"
 readme = "README.md"
 requires-python = ">=3.10"

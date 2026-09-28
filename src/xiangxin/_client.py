@@ -35,7 +35,7 @@ from ._base import (
     validate_timeout,
 )
 from ._logging import logger, redact_headers
-from .constants import DEFAULT_TIMEOUT, REFLEX_CREATE_TIMEOUT
+from .constants import DEFAULT_TIMEOUT, REFLEX_CREATE_TIMEOUT, RETRY_COUNT_HEADER
 from .exceptions import APIConnectionError, APITimeoutError, WaitTimeoutError, XiangxinError
 from .retries import RetryPolicy
 from .types import (
@@ -141,6 +141,13 @@ def _translate_transport_error(exc: httpx.TransportError, timeout: Any) -> Xiang
         err.timeout = timeout  # type: ignore[attr-defined]
         return err
     return APIConnectionError(f"连接失败 / connection error: {exc}")
+
+
+def _with_retry_count(headers: dict[str, str], attempt: int) -> dict[str, str]:
+    """首发不带；第 n 次重试带 ``x-xiangxin-retry-count: n``。 / Mark retries for the server."""
+    if attempt == 0:
+        return headers
+    return {**headers, RETRY_COUNT_HEADER: str(attempt)}
 
 
 def _next_delay(
@@ -300,7 +307,7 @@ class XiangxinClient:
         attempt = 0
         while True:
             try:
-                return self._send_once(method, url, headers, json_body, req_timeout)
+                return self._send_once(method, url, _with_retry_count(headers, attempt), json_body, req_timeout)
             except XiangxinError as error:
                 delay = _next_delay(policy, error, attempt, deadline)
                 if delay is None:
@@ -941,7 +948,7 @@ class AsyncXiangxinClient:
         attempt = 0
         while True:
             try:
-                return await self._send_once(method, url, headers, json_body, req_timeout)
+                return await self._send_once(method, url, _with_retry_count(headers, attempt), json_body, req_timeout)
             except XiangxinError as error:
                 delay = _next_delay(policy, error, attempt, deadline)
                 if delay is None:

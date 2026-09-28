@@ -10,7 +10,7 @@ from .exceptions import APIConnectionError, APIError, APITimeoutError, RateLimit
 
 __all__ = ["RetryPolicy", "DEFAULT_RETRY_STATUSES"]
 
-DEFAULT_RETRY_STATUSES: frozenset[int] = frozenset({429, 500, 502, 503, 504, 529})
+DEFAULT_RETRY_STATUSES: frozenset[int] = frozenset({408, 429, *range(500, 600)})
 """默认会重试的 HTTP 状态码。 / HTTP statuses retried by default."""
 
 
@@ -43,7 +43,7 @@ class RetryPolicy:
     backoff_initial: float = 0.5
     """首次退避秒数。 / First backoff delay in seconds."""
 
-    backoff_max: float = 8.0
+    backoff_max: float = 5.0
     """单次退避上限（秒）。 / Maximum single backoff delay in seconds."""
 
     backoff_jitter: float = 0.25
@@ -53,9 +53,9 @@ class RetryPolicy:
     """是否遵守 ``retry-after`` / ``retry-after-ms`` 响应头。 / Honor retry-after headers."""
 
     max_retry_after: float = 60.0
-    """服务端建议等待时间的上限（秒），超过则不再重试。
+    """服务端建议等待时间的上限（秒）；超过时不采纳，改用指数退避。
 
-    Upper bound on a server-requested wait; longer waits are not retried.
+    Upper bound on a server-requested wait; longer hints fall back to exponential backoff.
     """
 
     retry_connection_errors: bool = True
@@ -116,7 +116,8 @@ class RetryPolicy:
         if self.respect_retry_after and isinstance(error, APIError):
             hinted = error.retry_after if isinstance(error, RateLimitError) else parse_retry_after(error.headers)
             if hinted is not None:
-                if hinted > self.max_retry_after:
-                    return None
-                return hinted
+                if hinted <= self.max_retry_after:
+                    return hinted
+                # 建议等待过长：不采纳，改用指数退避（与 TypeSafe JS SDK 一致）
+                # A server hint beyond the cap is ignored in favour of exponential backoff.
         return self.backoff(retry_index)

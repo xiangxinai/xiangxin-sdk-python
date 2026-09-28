@@ -205,7 +205,7 @@ except APIError as e:
 
 ## 重试与超时
 
-默认对 429、529、500、502、503、504 以及连接错误 / 超时重试 2 次，指数退避加抖动；服务端返回 `retry-after` 时按其等待。422 等客户端错误不会重试。
+默认对 408、429、所有 5xx（含 529）以及连接错误 / 超时重试 2 次，指数退避（0.5 秒起翻倍，单次不超过 5 秒）加抖动；服务端返回 `retry-after-ms` / `retry-after` 时按其等待（超过 60 秒则改按退避）。重试请求带 `x-xiangxin-retry-count`。422 等客户端错误不会重试。
 
 ```python
 from xiangxin import RetryPolicy, XiangxinClient
