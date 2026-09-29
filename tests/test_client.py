@@ -41,14 +41,14 @@ def test_env_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("XIANGXIN_API_KEY", f"  {KEY}\n")
     client = XiangxinClient()
     assert client.base_url == "https://api.xiangxinai.cn"
-    assert client.model == "xiangxin-s1-latest"
+    assert client.model == "xiangxin-latest"
     monkeypatch.setenv("XIANGXIN_BASE_URL", BASE + "/")
-    monkeypatch.setenv("XIANGXIN_DEFAULT_MODEL", "xiangxin-s1-preview")
+    monkeypatch.setenv("XIANGXIN_DEFAULT_MODEL", "xiangxin-preview")
     client = XiangxinClient()
     assert client.base_url == BASE
-    assert client.model == "xiangxin-s1-preview"
+    assert client.model == "xiangxin-preview"
     # 显式参数优先 / explicit wins
-    assert XiangxinClient(model="xiangxin-s1-1.0.0").model == "xiangxin-s1-1.0.0"
+    assert XiangxinClient(model="xiangxin-2.0.0").model == "xiangxin-2.0.0"
 
 
 def test_missing_or_invalid_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -93,7 +93,7 @@ def test_request_body_shape_with_classes() -> None:
     assert request.headers["user-agent"].startswith("xiangxin-python/")
     assert body_of(route) == {
         "state": "我被重复扣费了两次",
-        "model": "xiangxin-s1-latest",
+        "model": "xiangxin-latest",
         "questions": {
             "is_urgent": {
                 "type": "noul",
@@ -143,12 +143,12 @@ def test_mixed_questions_model_override_and_extra_body() -> None:
         client.system_one(
             ["第一条消息", "第二条消息"],
             {"a": Noul(instructions="x"), "b": {"type": "noul", "instructions": "y", "weight": 2}},
-            model="xiangxin-s1-preview",
+            model="xiangxin-preview",
             extra_body={"beam": 4},
             extra_headers={"Authorization": "Bearer hijack", "X-Extra": "1"},
         )
     body = body_of(route)
-    assert body["model"] == "xiangxin-s1-preview"
+    assert body["model"] == "xiangxin-preview"
     assert body["beam"] == 4
     assert body["questions"]["b"]["weight"] == 2  # 字典字段原样透传 / dict passthrough
     req = route.calls.last.request
@@ -179,7 +179,7 @@ def test_answer_parsing_all_types() -> None:
     with make_client() as client:
         resp = client.system_one("s", {"is_urgent": Noul()})
     assert isinstance(resp, SystemOneResponse)
-    assert resp.model == "xiangxin-s1-1.0.0"
+    assert resp.model == "xiangxin-2.0.0"
     assert resp.usage.input_tokens == 296 and resp.usage.output_tokens == 20
 
     noul = resp.answers["is_urgent"]
@@ -241,7 +241,7 @@ def test_with_raw_response() -> None:
         assert raw.status_code == 200
         assert raw.headers["x-xiangxin-model-ms"] == "53"
         assert raw.request_id == "req_123"
-        assert raw.json()["model"] == "xiangxin-s1-1.0.0"
+        assert raw.json()["model"] == "xiangxin-2.0.0"
         assert raw.parse().answers["is_urgent"].noul == 0.95
         assert raw.parse() is raw.parse()
         assert client.with_raw_response.models.list().parse().models == []
@@ -253,16 +253,18 @@ def test_models_list() -> None:
         200,
         json={
             "models": [
-                {"name": "xiangxin-s1-latest", "description": "最新正式版", "release_date": "2026-10-01"},
-                {"name": "xiangxin-s1-preview", "description": "预览版", "release_date": "2026-10-01"},
+                {"name": "xiangxin-latest", "description": "最新正式版", "release_date": "2026-09-28"},
+                # 未知字段忽略，向前兼容 / unknown fields are ignored for forward compatibility
+                {"name": "xiangxin-preview", "description": "预览版", "release_date": "2026-09-28", "extra": 1},
             ]
         },
     )
     with make_client() as client:
         result = client.models.list()
     assert isinstance(result, ListModelsResponse)
-    assert [m.name for m in result.models] == ["xiangxin-s1-latest", "xiangxin-s1-preview"]
-    assert result.models[0].release_date == "2026-10-01"
+    assert [m.name for m in result.models] == ["xiangxin-latest", "xiangxin-preview"]
+    assert result.models[0].release_date == "2026-09-28"
+    assert result.models[1].description == "预览版"
     assert route.calls.last.request.headers["authorization"] == f"Bearer {KEY}"
 
 

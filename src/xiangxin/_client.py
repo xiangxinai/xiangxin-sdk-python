@@ -6,10 +6,8 @@ The synchronous ``XiangxinClient`` and asynchronous ``AsyncXiangxinClient``.
 from __future__ import annotations
 
 import asyncio
-import builtins
-import dataclasses
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from types import TracebackType
 from typing import Any, TypeVar, overload
 
@@ -18,34 +16,27 @@ from pydantic import BaseModel
 
 from ._base import (
     MODELS_PATH,
-    REFLEXES_PATH,
     SYSTEM_ONE_PATH,
     RawResponse,
     Timeout,
-    build_reflex_body,
     build_system_one_body,
     default_headers,
     log_response,
     make_api_error,
     merge_extra_headers,
-    reflex_path,
     resolve_api_key,
     resolve_base_url,
     resolve_model,
     validate_timeout,
 )
 from ._logging import logger, redact_headers
-from .constants import DEFAULT_TIMEOUT, REFLEX_CREATE_TIMEOUT, RETRY_COUNT_HEADER
-from .exceptions import APIConnectionError, APITimeoutError, WaitTimeoutError, XiangxinError
+from .constants import DEFAULT_TIMEOUT, RETRY_COUNT_HEADER
+from .exceptions import APIConnectionError, APITimeoutError, XiangxinError
 from .retries import RetryPolicy
 from .types import (
-    DeleteReflexResponse,
     JSONContent,
     ListModelsResponse,
-    ListReflexesResponse,
     Question,
-    Reflex,
-    ReflexExample,
     SystemOneResponse,
 )
 
@@ -54,8 +45,6 @@ __all__ = [
     "AsyncXiangxinClient",
     "Models",
     "AsyncModels",
-    "Reflexes",
-    "AsyncReflexes",
 ]
 
 ResponseT = TypeVar("ResponseT", bound=BaseModel)
@@ -105,28 +94,6 @@ class _Config:
             return self.timeout
         return httpx.USE_CLIENT_DEFAULT
 
-    def create_timeout(self, timeout: Timeout | None) -> Timeout:
-        """``reflexes.create`` 的超时：显式传入的优先，否则不短于 300 秒。
-
-        Timeout for ``reflexes.create``: an explicit value wins, otherwise at least 300s.
-        """
-        validate_timeout(timeout)
-        if timeout is not None:
-            return timeout
-        base = self.timeout if self.timeout is not None else DEFAULT_TIMEOUT
-        if isinstance(base, httpx.Timeout):
-            return base
-        return max(float(base), REFLEX_CREATE_TIMEOUT)
-
-    def create_retry(self, retry: RetryPolicy | None) -> RetryPolicy:
-        """``reflexes.create`` 的默认重试策略：不重试超时，避免重复提交训练。
-
-        Default retry policy for ``reflexes.create``: timeouts are not retried, to avoid a duplicate submission.
-        """
-        if retry is not None:
-            return retry
-        return dataclasses.replace(self.retry, retry_timeouts=False)
-
     def request_headers(self, extra_headers: Mapping[str, str] | None) -> dict[str, str]:
         headers = dict(self.headers)
         extra = merge_extra_headers(extra_headers)
@@ -164,35 +131,6 @@ def _next_delay(
     return delay
 
 
-def _wait_deadline(poll_interval: float, timeout: float | None) -> float | None:
-    if isinstance(poll_interval, bool) or not isinstance(poll_interval, (int, float)) or poll_interval <= 0:
-        raise XiangxinError(f"poll_interval 必须是正数 / invalid poll_interval: {poll_interval!r}")
-    if timeout is None:
-        return None
-    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or timeout < 0:
-        raise XiangxinError(f"timeout 必须是非负数 / invalid timeout: {timeout!r}")
-    return time.monotonic() + timeout
-
-
-def _wait_delay(reflex: Reflex, poll_interval: float, deadline: float | None) -> float | None:
-    """训练已结束返回 ``None``；否则返回下次查询前的等待秒数，超时抛 ``WaitTimeoutError``。
-
-    ``None`` when training is done; otherwise the delay before the next poll. Raises on deadline.
-    """
-    if reflex.done:
-        return None
-    if deadline is None:
-        return float(poll_interval)
-    remaining = deadline - time.monotonic()
-    if remaining <= 0:
-        raise WaitTimeoutError(
-            f"等待反射 {reflex.name!r} 超时，当前状态 {reflex.status} / timed out waiting for reflex"
-            f" {reflex.name!r} (status={reflex.status})",
-            reflex,
-        )
-    return min(float(poll_interval), remaining)
-
-
 # ===========================================================================
 # 同步 / Sync
 # ===========================================================================
@@ -208,8 +146,8 @@ class XiangxinClient:
         api_key: API 密钥，默认读取 ``XIANGXIN_API_KEY``。 / API key; defaults to ``XIANGXIN_API_KEY``.
         base_url: API 根地址，默认读取 ``XIANGXIN_BASE_URL``，否则 ``https://api.xiangxinai.cn``。
             / API root; defaults to ``XIANGXIN_BASE_URL`` or ``https://api.xiangxinai.cn``.
-        model: 默认模型，默认 ``xiangxin-s1-latest``（可用 ``XIANGXIN_DEFAULT_MODEL`` 覆盖）。
-            / Default model, ``xiangxin-s1-latest`` unless ``XIANGXIN_DEFAULT_MODEL`` is set.
+        model: 默认模型，默认 ``xiangxin-latest``（可用 ``XIANGXIN_DEFAULT_MODEL`` 覆盖）。
+            / Default model, ``xiangxin-latest`` unless ``XIANGXIN_DEFAULT_MODEL`` is set.
         retry: 重试策略，传 ``RetryPolicy(max_retries=0)`` 关闭重试。 / Retry policy.
         timeout: 单次 HTTP 操作超时（秒或 ``httpx.Timeout``），默认 120 秒。
             / Per-operation timeout (seconds or ``httpx.Timeout``), default 120s.
@@ -265,8 +203,6 @@ class XiangxinClient:
             )
         self.models = Models(self)
         """模型资源：``client.models.list()``。 / Models resource."""
-        self.reflexes = Reflexes(self)
-        """条件反射资源：``client.reflexes.create(...)``。 / Reflexes resource."""
         self.with_raw_response = XiangxinClientWithRawResponse(self)
         """返回原始 HTTP 响应的视图。 / View returning raw HTTP responses."""
 
@@ -403,8 +339,8 @@ class XiangxinClient:
             state: 文本、JSON 对象或数组。 / Text, a JSON object, or an array.
             questions: 非空映射：问题名 → ``Noul`` / ``Choice`` / ``Score`` 或等价字典。
                 / Non-empty mapping of names to question objects or dicts.
-            model: 覆盖客户端默认模型，如 ``xiangxin-s1``、``xiangxin-reflex`` 或
-                ``reflex_model("<名字>")``。 / Override the default model, e.g. a reflex.
+            model: 覆盖客户端默认模型，如版本化 ID ``xiangxin-2.0.0``。
+                / Override the default model, e.g. the versioned ID ``xiangxin-2.0.0``.
             retry: 仅本次调用生效的重试策略。 / Retry policy for this call only.
             timeout: 仅本次调用生效的超时。 / Timeout for this call only.
             extra_headers: 附加请求头（不能覆盖鉴权头）。 / Extra headers (auth is protected).
@@ -499,317 +435,6 @@ class _ModelsWithRawResponse:
         return self._models._list_raw(retry=retry, timeout=timeout, extra_headers=extra_headers)
 
 
-class Reflexes:
-    """条件反射资源，通过 ``client.reflexes`` 访问：用标注数据练出自己的反射。
-
-    Reflexes resource, reached via ``client.reflexes``: train your own reflex from labeled data.
-
-    练好的反射用 ``model=reflex_model(name)``（即 ``"xiangxin-reflex:<name>"``）调用 ``system_one``。
-    Call ``system_one`` with ``model=reflex_model(name)`` to use a trained reflex.
-
-    Example::
-
-        from xiangxin import Choice, XiangxinClient, reflex_model
-
-        client = XiangxinClient()
-        client.reflexes.create(
-            "ticket-router",
-            questions={"department": Choice(criteria={"billing": None, "technical": None})},
-            examples=[{"state": "我被重复扣费了", "answers": {"department": "billing"}}, ...],
-        )
-        reflex = client.reflexes.wait("ticket-router")
-        print(reflex.status, reflex.metrics.after.accuracy)
-        client.system_one(state, questions, model=reflex_model("ticket-router"))
-    """
-
-    def __init__(self, client: XiangxinClient) -> None:
-        self._client = client
-
-    def _create_raw(
-        self,
-        name: str,
-        questions: Mapping[str, Question],
-        examples: Sequence[ReflexExample],
-        *,
-        description: str | None,
-        retry: RetryPolicy | None,
-        timeout: Timeout | None,
-        extra_headers: Mapping[str, str] | None,
-        extra_body: Mapping[str, Any] | None,
-    ) -> RawResponse[Reflex]:
-        config = self._client._config
-        body = build_reflex_body(name, questions, examples, description, extra_body)
-        response = self._client._request(
-            "POST",
-            REFLEXES_PATH,
-            json_body=body,
-            retry=config.create_retry(retry),
-            timeout=config.create_timeout(timeout),
-            extra_headers=extra_headers,
-        )
-        return RawResponse(response, Reflex)
-
-    def create(
-        self,
-        name: str,
-        questions: Mapping[str, Question],
-        examples: Sequence[ReflexExample],
-        *,
-        description: str | None = None,
-        retry: RetryPolicy | None = None,
-        timeout: Timeout | None = None,
-        extra_headers: Mapping[str, str] | None = None,
-        extra_body: Mapping[str, Any] | None = None,
-    ) -> Reflex:
-        """提交训练：新建反射，或给同名反射重练（新版本练好前旧版本照常可用）。
-
-        Submit training: create a reflex, or retrain an existing one of the same
-        name (the old version stays live until the new one is ready).
-
-        Args:
-            name: 反射名，满足 ``^[a-z0-9][a-z0-9-]{0,62}$``。 / Reflex name.
-            questions: 问题名 → ``Noul`` / ``Choice`` / ``Score`` 或等价字典（≤ 32 个）。
-                / Questions, as for ``system_one`` (at most 32).
-            examples: 10–50,000 条 ``{"state": ..., "answers": {问题名: 标注}}``；Noul 标
-                ``True/False``，Choice 标选项名，Score 标档位下标；可以只标部分问题。
-                / 10–50,000 labeled examples; labels are bools, option labels or level indices.
-            description: 可选说明（≤ 500 字）。 / Optional description.
-            retry: 仅本次调用生效的重试策略。默认沿用客户端策略但**不重试超时**，
-                以免重复提交；409 / 422 从不重试。
-                / Retry policy; by default timeouts are not retried. 409/422 are never retried.
-            timeout: 本次超时，默认取客户端超时与 300 秒中较大者。
-                / Timeout; defaults to the larger of the client timeout and 300s.
-            extra_headers: 附加请求头。 / Extra headers.
-            extra_body: 浅合并到请求体顶层的附加字段。 / Extra top-level body fields.
-
-        Returns:
-            ``status`` 为 ``queued`` 的 :class:`Reflex`。 / The queued :class:`Reflex`.
-
-        Raises:
-            ConflictError: ``reflex_busy``（该反射正在训练）或 ``too_many_reflexes``。
-            UnprocessableEntityError: 名字不合法、样本过少 / 过多、问题或标注不合法。
-            RequestTooLargeError: 请求体超过 50MB。 / Body above 50MB.
-            InternalServerError: ``trainer_unavailable``（503，会自动重试）。
-        """
-        return self._create_raw(
-            name,
-            questions,
-            examples,
-            description=description,
-            retry=retry,
-            timeout=timeout,
-            extra_headers=extra_headers,
-            extra_body=extra_body,
-        ).parse()
-
-    def _list_raw(
-        self,
-        *,
-        retry: RetryPolicy | None,
-        timeout: Timeout | None,
-        extra_headers: Mapping[str, str] | None,
-    ) -> RawResponse[ListReflexesResponse]:
-        response = self._client._request(
-            "GET", REFLEXES_PATH, retry=retry, timeout=timeout, extra_headers=extra_headers
-        )
-        return RawResponse(response, ListReflexesResponse)
-
-    def list(
-        self,
-        *,
-        retry: RetryPolicy | None = None,
-        timeout: Timeout | None = None,
-        extra_headers: Mapping[str, str] | None = None,
-    ) -> builtins.list[Reflex]:
-        """列出本组织的反射，新建的在前。 / List the organization's reflexes, newest first."""
-        return self._list_raw(retry=retry, timeout=timeout, extra_headers=extra_headers).parse().reflexes
-
-    def _get_raw(
-        self,
-        name: str,
-        *,
-        retry: RetryPolicy | None,
-        timeout: Timeout | None,
-        extra_headers: Mapping[str, str] | None,
-    ) -> RawResponse[Reflex]:
-        response = self._client._request(
-            "GET", reflex_path(name), retry=retry, timeout=timeout, extra_headers=extra_headers
-        )
-        return RawResponse(response, Reflex)
-
-    def get(
-        self,
-        name: str,
-        *,
-        retry: RetryPolicy | None = None,
-        timeout: Timeout | None = None,
-        extra_headers: Mapping[str, str] | None = None,
-    ) -> Reflex:
-        """查询一个反射（含训练进度与成绩）。 / Get a reflex, including progress and metrics.
-
-        Raises:
-            NotFoundError: 反射不存在或已删除。 / No such reflex.
-        """
-        return self._get_raw(name, retry=retry, timeout=timeout, extra_headers=extra_headers).parse()
-
-    def _cancel_raw(
-        self,
-        name: str,
-        *,
-        retry: RetryPolicy | None,
-        timeout: Timeout | None,
-        extra_headers: Mapping[str, str] | None,
-    ) -> RawResponse[Reflex]:
-        response = self._client._request(
-            "POST", reflex_path(name, "/cancel"), retry=retry, timeout=timeout, extra_headers=extra_headers
-        )
-        return RawResponse(response, Reflex)
-
-    def cancel(
-        self,
-        name: str,
-        *,
-        retry: RetryPolicy | None = None,
-        timeout: Timeout | None = None,
-        extra_headers: Mapping[str, str] | None = None,
-    ) -> Reflex:
-        """取消排队或训练中的任务；已有旧版本则旧版本继续可用。
-
-        Cancel a queued or running training; an existing trained version stays live.
-        """
-        return self._cancel_raw(name, retry=retry, timeout=timeout, extra_headers=extra_headers).parse()
-
-    def _delete_raw(
-        self,
-        name: str,
-        *,
-        retry: RetryPolicy | None,
-        timeout: Timeout | None,
-        extra_headers: Mapping[str, str] | None,
-    ) -> RawResponse[DeleteReflexResponse]:
-        response = self._client._request(
-            "DELETE", reflex_path(name), retry=retry, timeout=timeout, extra_headers=extra_headers
-        )
-        return RawResponse(response, DeleteReflexResponse)
-
-    def delete(
-        self,
-        name: str,
-        *,
-        retry: RetryPolicy | None = None,
-        timeout: Timeout | None = None,
-        extra_headers: Mapping[str, str] | None = None,
-    ) -> None:
-        """删除反射及其权重，名字可以重用。 / Delete a reflex and its weights; the name can be reused."""
-        self._delete_raw(name, retry=retry, timeout=timeout, extra_headers=extra_headers).parse()
-
-    def wait(
-        self,
-        name: str,
-        *,
-        poll_interval: float = 2.0,
-        timeout: float | None = None,
-        retry: RetryPolicy | None = None,
-        extra_headers: Mapping[str, str] | None = None,
-    ) -> Reflex:
-        """轮询直到训练结束（``ready`` / ``failed`` / ``cancelled``），返回最终的反射。
-
-        Poll until training reaches ``ready``, ``failed`` or ``cancelled`` and
-        return the reflex. For a retrain, ``ready`` means the new version is live.
-        A failed or cancelled training is returned, not raised — check ``status``.
-
-        Args:
-            name: 反射名。 / Reflex name.
-            poll_interval: 两次查询间隔（秒）。 / Seconds between polls.
-            timeout: 最长等待秒数（注意：不是单次 HTTP 超时）；``None`` 不限。
-                / Maximum total wait in seconds (not the per-request timeout); ``None`` = no limit.
-            retry: 每次查询的重试策略。 / Retry policy for each poll.
-            extra_headers: 附加请求头。 / Extra headers.
-
-        Raises:
-            WaitTimeoutError: 超过 ``timeout`` 仍未结束（训练不受影响）。 / Deadline exceeded.
-        """
-        deadline = _wait_deadline(poll_interval, timeout)
-        while True:
-            reflex = self.get(name, retry=retry, extra_headers=extra_headers)
-            delay = _wait_delay(reflex, poll_interval, deadline)
-            if delay is None:
-                return reflex
-            _sleep(delay)
-
-
-class _ReflexesWithRawResponse:
-    def __init__(self, reflexes: Reflexes) -> None:
-        self._reflexes = reflexes
-
-    def create(
-        self,
-        name: str,
-        questions: Mapping[str, Question],
-        examples: Sequence[ReflexExample],
-        *,
-        description: str | None = None,
-        retry: RetryPolicy | None = None,
-        timeout: Timeout | None = None,
-        extra_headers: Mapping[str, str] | None = None,
-        extra_body: Mapping[str, Any] | None = None,
-    ) -> RawResponse[Reflex]:
-        """同 ``reflexes.create``，但返回 :class:`RawResponse`。 / Like ``reflexes.create`` but raw."""
-        return self._reflexes._create_raw(
-            name,
-            questions,
-            examples,
-            description=description,
-            retry=retry,
-            timeout=timeout,
-            extra_headers=extra_headers,
-            extra_body=extra_body,
-        )
-
-    def list(
-        self,
-        *,
-        retry: RetryPolicy | None = None,
-        timeout: Timeout | None = None,
-        extra_headers: Mapping[str, str] | None = None,
-    ) -> RawResponse[ListReflexesResponse]:
-        """同 ``reflexes.list``，但返回 :class:`RawResponse`。 / Like ``reflexes.list`` but raw."""
-        return self._reflexes._list_raw(retry=retry, timeout=timeout, extra_headers=extra_headers)
-
-    def get(
-        self,
-        name: str,
-        *,
-        retry: RetryPolicy | None = None,
-        timeout: Timeout | None = None,
-        extra_headers: Mapping[str, str] | None = None,
-    ) -> RawResponse[Reflex]:
-        """同 ``reflexes.get``，但返回 :class:`RawResponse`。 / Like ``reflexes.get`` but raw."""
-        return self._reflexes._get_raw(name, retry=retry, timeout=timeout, extra_headers=extra_headers)
-
-    def cancel(
-        self,
-        name: str,
-        *,
-        retry: RetryPolicy | None = None,
-        timeout: Timeout | None = None,
-        extra_headers: Mapping[str, str] | None = None,
-    ) -> RawResponse[Reflex]:
-        """同 ``reflexes.cancel``，但返回 :class:`RawResponse`。 / Like ``reflexes.cancel`` but raw."""
-        return self._reflexes._cancel_raw(name, retry=retry, timeout=timeout, extra_headers=extra_headers)
-
-    def delete(
-        self,
-        name: str,
-        *,
-        retry: RetryPolicy | None = None,
-        timeout: Timeout | None = None,
-        extra_headers: Mapping[str, str] | None = None,
-    ) -> RawResponse[DeleteReflexResponse]:
-        """同 ``reflexes.delete``，但返回 :class:`RawResponse`。 / Like ``reflexes.delete`` but raw."""
-        return self._reflexes._delete_raw(name, retry=retry, timeout=timeout, extra_headers=extra_headers)
-
-
 class XiangxinClientWithRawResponse:
     """``client.with_raw_response``：各方法返回 :class:`RawResponse`，可读取响应头。
 
@@ -825,7 +450,6 @@ class XiangxinClientWithRawResponse:
     def __init__(self, client: XiangxinClient) -> None:
         self._client = client
         self.models = _ModelsWithRawResponse(client.models)
-        self.reflexes = _ReflexesWithRawResponse(client.reflexes)
 
     def system_one(
         self,
@@ -910,8 +534,6 @@ class AsyncXiangxinClient:
             )
         self.models = AsyncModels(self)
         """模型资源：``await client.models.list()``。 / Models resource."""
-        self.reflexes = AsyncReflexes(self)
-        """条件反射资源：``await client.reflexes.create(...)``。 / Reflexes resource."""
         self.with_raw_response = AsyncXiangxinClientWithRawResponse(self)
         """返回原始 HTTP 响应的视图。 / View returning raw HTTP responses."""
 
@@ -1121,317 +743,12 @@ class _AsyncModelsWithRawResponse:
         return await self._models._list_raw(retry=retry, timeout=timeout, extra_headers=extra_headers)
 
 
-class AsyncReflexes:
-    """异步条件反射资源，通过 ``client.reflexes`` 访问；方法、参数与返回值同 :class:`Reflexes`。
-
-    Async reflexes resource reached via ``client.reflexes``; same methods as :class:`Reflexes`.
-
-    Example::
-
-        reflex = await client.reflexes.create("ticket-router", questions, examples)
-        reflex = await client.reflexes.wait("ticket-router")
-    """
-
-    def __init__(self, client: AsyncXiangxinClient) -> None:
-        self._client = client
-
-    async def _create_raw(
-        self,
-        name: str,
-        questions: Mapping[str, Question],
-        examples: Sequence[ReflexExample],
-        *,
-        description: str | None,
-        retry: RetryPolicy | None,
-        timeout: Timeout | None,
-        extra_headers: Mapping[str, str] | None,
-        extra_body: Mapping[str, Any] | None,
-    ) -> RawResponse[Reflex]:
-        config = self._client._config
-        body = build_reflex_body(name, questions, examples, description, extra_body)
-        response = await self._client._request(
-            "POST",
-            REFLEXES_PATH,
-            json_body=body,
-            retry=config.create_retry(retry),
-            timeout=config.create_timeout(timeout),
-            extra_headers=extra_headers,
-        )
-        return RawResponse(response, Reflex)
-
-    async def create(
-        self,
-        name: str,
-        questions: Mapping[str, Question],
-        examples: Sequence[ReflexExample],
-        *,
-        description: str | None = None,
-        retry: RetryPolicy | None = None,
-        timeout: Timeout | None = None,
-        extra_headers: Mapping[str, str] | None = None,
-        extra_body: Mapping[str, Any] | None = None,
-    ) -> Reflex:
-        """提交训练：新建反射，或给同名反射重练（新版本练好前旧版本照常可用）。
-
-        Submit training: create a reflex, or retrain an existing one of the same
-        name (the old version stays live until the new one is ready).
-
-        Args:
-            name: 反射名，满足 ``^[a-z0-9][a-z0-9-]{0,62}$``。 / Reflex name.
-            questions: 问题名 → ``Noul`` / ``Choice`` / ``Score`` 或等价字典（≤ 32 个）。
-                / Questions, as for ``system_one`` (at most 32).
-            examples: 10–50,000 条 ``{"state": ..., "answers": {问题名: 标注}}``；Noul 标
-                ``True/False``，Choice 标选项名，Score 标档位下标；可以只标部分问题。
-                / 10–50,000 labeled examples; labels are bools, option labels or level indices.
-            description: 可选说明（≤ 500 字）。 / Optional description.
-            retry: 仅本次调用生效的重试策略。默认沿用客户端策略但**不重试超时**，
-                以免重复提交；409 / 422 从不重试。
-                / Retry policy; by default timeouts are not retried. 409/422 are never retried.
-            timeout: 本次超时，默认取客户端超时与 300 秒中较大者。
-                / Timeout; defaults to the larger of the client timeout and 300s.
-            extra_headers: 附加请求头。 / Extra headers.
-            extra_body: 浅合并到请求体顶层的附加字段。 / Extra top-level body fields.
-
-        Returns:
-            ``status`` 为 ``queued`` 的 :class:`Reflex`。 / The queued :class:`Reflex`.
-
-        Raises:
-            ConflictError: ``reflex_busy``（该反射正在训练）或 ``too_many_reflexes``。
-            UnprocessableEntityError: 名字不合法、样本过少 / 过多、问题或标注不合法。
-            RequestTooLargeError: 请求体超过 50MB。 / Body above 50MB.
-            InternalServerError: ``trainer_unavailable``（503，会自动重试）。
-        """
-        raw = await self._create_raw(
-            name,
-            questions,
-            examples,
-            description=description,
-            retry=retry,
-            timeout=timeout,
-            extra_headers=extra_headers,
-            extra_body=extra_body,
-        )
-        return raw.parse()
-
-    async def _list_raw(
-        self,
-        *,
-        retry: RetryPolicy | None,
-        timeout: Timeout | None,
-        extra_headers: Mapping[str, str] | None,
-    ) -> RawResponse[ListReflexesResponse]:
-        response = await self._client._request(
-            "GET", REFLEXES_PATH, retry=retry, timeout=timeout, extra_headers=extra_headers
-        )
-        return RawResponse(response, ListReflexesResponse)
-
-    async def list(
-        self,
-        *,
-        retry: RetryPolicy | None = None,
-        timeout: Timeout | None = None,
-        extra_headers: Mapping[str, str] | None = None,
-    ) -> builtins.list[Reflex]:
-        """列出本组织的反射，新建的在前。 / List the organization's reflexes, newest first."""
-        raw = await self._list_raw(retry=retry, timeout=timeout, extra_headers=extra_headers)
-        return raw.parse().reflexes
-
-    async def _get_raw(
-        self,
-        name: str,
-        *,
-        retry: RetryPolicy | None,
-        timeout: Timeout | None,
-        extra_headers: Mapping[str, str] | None,
-    ) -> RawResponse[Reflex]:
-        response = await self._client._request(
-            "GET", reflex_path(name), retry=retry, timeout=timeout, extra_headers=extra_headers
-        )
-        return RawResponse(response, Reflex)
-
-    async def get(
-        self,
-        name: str,
-        *,
-        retry: RetryPolicy | None = None,
-        timeout: Timeout | None = None,
-        extra_headers: Mapping[str, str] | None = None,
-    ) -> Reflex:
-        """查询一个反射（含训练进度与成绩）。 / Get a reflex, including progress and metrics.
-
-        Raises:
-            NotFoundError: 反射不存在或已删除。 / No such reflex.
-        """
-        raw = await self._get_raw(name, retry=retry, timeout=timeout, extra_headers=extra_headers)
-        return raw.parse()
-
-    async def _cancel_raw(
-        self,
-        name: str,
-        *,
-        retry: RetryPolicy | None,
-        timeout: Timeout | None,
-        extra_headers: Mapping[str, str] | None,
-    ) -> RawResponse[Reflex]:
-        response = await self._client._request(
-            "POST", reflex_path(name, "/cancel"), retry=retry, timeout=timeout, extra_headers=extra_headers
-        )
-        return RawResponse(response, Reflex)
-
-    async def cancel(
-        self,
-        name: str,
-        *,
-        retry: RetryPolicy | None = None,
-        timeout: Timeout | None = None,
-        extra_headers: Mapping[str, str] | None = None,
-    ) -> Reflex:
-        """取消排队或训练中的任务；已有旧版本则旧版本继续可用。
-
-        Cancel a queued or running training; an existing trained version stays live.
-        """
-        raw = await self._cancel_raw(name, retry=retry, timeout=timeout, extra_headers=extra_headers)
-        return raw.parse()
-
-    async def _delete_raw(
-        self,
-        name: str,
-        *,
-        retry: RetryPolicy | None,
-        timeout: Timeout | None,
-        extra_headers: Mapping[str, str] | None,
-    ) -> RawResponse[DeleteReflexResponse]:
-        response = await self._client._request(
-            "DELETE", reflex_path(name), retry=retry, timeout=timeout, extra_headers=extra_headers
-        )
-        return RawResponse(response, DeleteReflexResponse)
-
-    async def delete(
-        self,
-        name: str,
-        *,
-        retry: RetryPolicy | None = None,
-        timeout: Timeout | None = None,
-        extra_headers: Mapping[str, str] | None = None,
-    ) -> None:
-        """删除反射及其权重，名字可以重用。 / Delete a reflex and its weights; the name can be reused."""
-        raw = await self._delete_raw(name, retry=retry, timeout=timeout, extra_headers=extra_headers)
-        raw.parse()
-
-    async def wait(
-        self,
-        name: str,
-        *,
-        poll_interval: float = 2.0,
-        timeout: float | None = None,
-        retry: RetryPolicy | None = None,
-        extra_headers: Mapping[str, str] | None = None,
-    ) -> Reflex:
-        """轮询直到训练结束（``ready`` / ``failed`` / ``cancelled``），返回最终的反射。
-
-        Poll until training reaches ``ready``, ``failed`` or ``cancelled`` and
-        return the reflex. For a retrain, ``ready`` means the new version is live.
-        A failed or cancelled training is returned, not raised — check ``status``.
-
-        Args:
-            name: 反射名。 / Reflex name.
-            poll_interval: 两次查询间隔（秒）。 / Seconds between polls.
-            timeout: 最长等待秒数（注意：不是单次 HTTP 超时）；``None`` 不限。
-                / Maximum total wait in seconds (not the per-request timeout); ``None`` = no limit.
-            retry: 每次查询的重试策略。 / Retry policy for each poll.
-            extra_headers: 附加请求头。 / Extra headers.
-
-        Raises:
-            WaitTimeoutError: 超过 ``timeout`` 仍未结束（训练不受影响）。 / Deadline exceeded.
-        """
-        deadline = _wait_deadline(poll_interval, timeout)
-        while True:
-            reflex = await self.get(name, retry=retry, extra_headers=extra_headers)
-            delay = _wait_delay(reflex, poll_interval, deadline)
-            if delay is None:
-                return reflex
-            await _async_sleep(delay)
-
-
-class _AsyncReflexesWithRawResponse:
-    def __init__(self, reflexes: AsyncReflexes) -> None:
-        self._reflexes = reflexes
-
-    async def create(
-        self,
-        name: str,
-        questions: Mapping[str, Question],
-        examples: Sequence[ReflexExample],
-        *,
-        description: str | None = None,
-        retry: RetryPolicy | None = None,
-        timeout: Timeout | None = None,
-        extra_headers: Mapping[str, str] | None = None,
-        extra_body: Mapping[str, Any] | None = None,
-    ) -> RawResponse[Reflex]:
-        """同 ``reflexes.create``，但返回 :class:`RawResponse`。 / Like ``reflexes.create`` but raw."""
-        return await self._reflexes._create_raw(
-            name,
-            questions,
-            examples,
-            description=description,
-            retry=retry,
-            timeout=timeout,
-            extra_headers=extra_headers,
-            extra_body=extra_body,
-        )
-
-    async def list(
-        self,
-        *,
-        retry: RetryPolicy | None = None,
-        timeout: Timeout | None = None,
-        extra_headers: Mapping[str, str] | None = None,
-    ) -> RawResponse[ListReflexesResponse]:
-        """同 ``reflexes.list``，但返回 :class:`RawResponse`。 / Like ``reflexes.list`` but raw."""
-        return await self._reflexes._list_raw(retry=retry, timeout=timeout, extra_headers=extra_headers)
-
-    async def get(
-        self,
-        name: str,
-        *,
-        retry: RetryPolicy | None = None,
-        timeout: Timeout | None = None,
-        extra_headers: Mapping[str, str] | None = None,
-    ) -> RawResponse[Reflex]:
-        """同 ``reflexes.get``，但返回 :class:`RawResponse`。 / Like ``reflexes.get`` but raw."""
-        return await self._reflexes._get_raw(name, retry=retry, timeout=timeout, extra_headers=extra_headers)
-
-    async def cancel(
-        self,
-        name: str,
-        *,
-        retry: RetryPolicy | None = None,
-        timeout: Timeout | None = None,
-        extra_headers: Mapping[str, str] | None = None,
-    ) -> RawResponse[Reflex]:
-        """同 ``reflexes.cancel``，但返回 :class:`RawResponse`。 / Like ``reflexes.cancel`` but raw."""
-        return await self._reflexes._cancel_raw(name, retry=retry, timeout=timeout, extra_headers=extra_headers)
-
-    async def delete(
-        self,
-        name: str,
-        *,
-        retry: RetryPolicy | None = None,
-        timeout: Timeout | None = None,
-        extra_headers: Mapping[str, str] | None = None,
-    ) -> RawResponse[DeleteReflexResponse]:
-        """同 ``reflexes.delete``，但返回 :class:`RawResponse`。 / Like ``reflexes.delete`` but raw."""
-        return await self._reflexes._delete_raw(name, retry=retry, timeout=timeout, extra_headers=extra_headers)
-
-
 class AsyncXiangxinClientWithRawResponse:
     """异步版 ``with_raw_response``。 / Async ``with_raw_response`` view."""
 
     def __init__(self, client: AsyncXiangxinClient) -> None:
         self._client = client
         self.models = _AsyncModelsWithRawResponse(client.models)
-        self.reflexes = _AsyncReflexesWithRawResponse(client.reflexes)
 
     async def system_one(
         self,

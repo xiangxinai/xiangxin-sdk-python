@@ -42,7 +42,7 @@ async def test_async_system_one_body_and_parsing() -> None:
             },
         )
     body = json.loads(route.calls.last.request.content)
-    assert body["model"] == "xiangxin-s1-latest"
+    assert body["model"] == "xiangxin-latest"
     assert body["questions"]["department"] == {"type": "choice", "criteria": {"billing": None, "technical": None}}
     assert body["questions"]["is_urgent"] == {"type": "noul", "instructions": "紧急？"}
     assert isinstance(resp, SystemOneResponse)
@@ -64,14 +64,14 @@ async def test_async_dict_vs_class_equivalent() -> None:
 
 @respx.mock
 async def test_async_models_and_raw() -> None:
-    respx.get(f"{BASE}/v1/models").respond(200, json={"models": [{"name": "xiangxin-s1-latest", "description": "d"}]})
+    respx.get(f"{BASE}/v1/models").respond(200, json={"models": [{"name": "xiangxin-latest", "description": "d"}]})
     respx.post(URL).respond(200, json=SAMPLE_RESPONSE, headers=SAMPLE_HEADERS)
     async with make_client() as client:
         models = await client.models.list()
-        assert models.models[0].name == "xiangxin-s1-latest"
+        assert models.models[0].name == "xiangxin-latest"
         raw = await client.with_raw_response.system_one("s", {"a": Noul()})
         assert raw.headers["x-xiangxin-total-ms"] == "71"
-        assert raw.parse().model == "xiangxin-s1-1.0.0"
+        assert raw.parse().model == "xiangxin-2.0.0"
         raw_models = await client.with_raw_response.models.list()
         assert raw_models.status_code == 200
 

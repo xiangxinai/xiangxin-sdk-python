@@ -9,7 +9,7 @@ import xiangxin._client as client_module
 BASE = "https://api.test.xiangxinai.cn"
 
 SAMPLE_RESPONSE: dict[str, Any] = {
-    "model": "xiangxin-s1-1.0.0",
+    "model": "xiangxin-2.0.0",
     "answers": {
         "is_urgent": {"type": "noul", "noul": 0.95},
         "department": {

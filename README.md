@@ -1,8 +1,8 @@
 # 象信 AI Python SDK
 
-`xiangxin-sdk` 是 [象信 AI](https://xiangxinai.cn) 的官方 Python SDK，用于调用**象信·系统一**系统一模型。
+`xiangxin-sdk` 是 [象信 AI](https://xiangxinai.cn) 的官方 Python SDK，用于调用系统一模型**象信（xiangxin）**。
 
-象信·系统一不生成文本：你给它一段**状态（state）**和一组**带类型的问题**，它一次前向就返回带校准概率的结构化答案。问题有三种原语：
+象信不生成文本：你给它一段**状态（state）**和一组**带类型的问题**，它一次前向就返回带校准概率的结构化答案。问题有三种原语：
 
 | 原语 | 用途 | 答案字段 |
 |---|---|---|
@@ -59,7 +59,7 @@ print(resp.answers["is_urgent"].noul)          # 0.95
 print(resp.answers["department"].choice)       # "billing"
 print(resp.answers["department"].confidence)   # 0.81
 print(resp.answers["frustration"].score)       # 1.05
-print(resp.usage.input_tokens, resp.model)     # 296 xiangxin-s1-1.0.0
+print(resp.usage.input_tokens, resp.model)     # 296 xiangxin-2.0.0
 ```
 
 也可以按类型分组读取：`resp.nouls`、`resp.choices`、`resp.scores`。
@@ -119,47 +119,14 @@ for m in client.models.list().models:
     print(m.name, m.description, m.release_date)
 ```
 
-默认模型为 `xiangxin-s1-latest`。可在创建客户端时指定 `model=`，或在单次调用时传入 `model=` 覆盖。
+只有一个模型：象信（xiangxin）。`models.list()` 列出可在 `model` 中使用的别名：
 
-两个模型家族共用同一个 `system_one` 接口，只换 `model`：
+| 模型 | 说明 |
+|---|---|
+| `xiangxin-latest` | 最新正式版，SDK 默认值 |
+| `xiangxin-preview` | 预览版；当前没有预览版，指向与 `xiangxin-latest` 相同的版本 |
 
-| 模型 | 常量 | 说明 |
-|---|---|---|
-| `xiangxin-s1` | `S1_MODEL` | 系统一（象信·系统一），有世界知识，零样本即可判断 |
-| `xiangxin-reflex` | `REFLEX_MODEL` | 基础条件反射，毫秒级、固定耗时，价格为系统一的 1/100 |
-| `xiangxin-reflex:<名字>` | `reflex_model("<名字>")` | 用你自己的数据练出来的反射 |
-
-## 条件反射
-
-条件反射用来替代正则：给它 10–50,000 条标注样本，就能练出一个只属于你组织的反射，推理毫秒级、耗时固定。它没有世界知识，适合分流、意图、垃圾 / 敏感检测、格式检查这类"看一眼就该反应"的判断；需要常识或推理的问题请用系统一。
-
-```python
-from xiangxin import Choice, Noul, XiangxinClient, reflex_model
-
-client = XiangxinClient()
-questions = {
-    "department": Choice(instructions="分派部门", criteria={"billing": None, "technical": None, "sales": None}),
-    "is_urgent": Noul(instructions="是否需要当天处理？"),
-}
-examples = [
-    # Noul 标 True/False，Choice 标选项名，Score 标档位下标；可以只标部分问题
-    {"state": "我被重复扣费了两次", "answers": {"department": "billing", "is_urgent": True}},
-    {"state": "App 打不开，一直闪退", "answers": {"department": "technical"}},
-    # ……至少 10 条
-]
-
-client.reflexes.create("ticket-router", questions, examples, description="工单分流")
-reflex = client.reflexes.wait("ticket-router")   # 轮询到 ready / failed / cancelled
-if reflex.status == "ready":
-    print(reflex.metrics.before.accuracy, "→", reflex.metrics.after.accuracy)
-
-resp = client.system_one("退款什么时候到账？", questions, model=reflex_model("ticket-router"))
-```
-
-- 同名再 `create` 即**重练**；新版本练好前旧版本照常可用（`reflex.usable`），训练中再次提交会抛 `ConflictError`（`reflex_busy`）。
-- `client.reflexes.list()` / `get(name)` / `cancel(name)` / `delete(name)` 管理反射；`wait(name, poll_interval=2.0, timeout=None)` 超时抛 `WaitTimeoutError`，训练失败或被取消时照常返回，请检查 `status`。
-- `create` 默认超时不短于 300 秒（请求体上限 50MB），且默认不重试超时，避免重复提交。
-- 首次训练尚未完成时用该反射推理会抛 `ConflictError`（`reflex_not_ready`）。
+响应里的 `resp.model` 是实际使用的版本化 ID，如 `xiangxin-2.0.0`；需要固定版本时可直接传版本化 ID。可在创建客户端时指定 `model=`，或在单次调用时传入 `model=` 覆盖。
 
 ## 读取响应头与原始响应
 
@@ -183,9 +150,8 @@ resp = raw.parse()
 |---|---|---|
 | `AuthenticationError` | 401 | API 密钥缺失、无效或已禁用 |
 | `InsufficientBalanceError` | 402 | 余额不足，请到控制台充值 |
-| `NotFoundError` | 404 | 模型或反射不存在 |
-| `ConflictError` | 409 | 反射尚未练好（`reflex_not_ready`）、正在训练（`reflex_busy`）或数量已达上限（`too_many_reflexes`） |
-| `RequestTooLargeError` | 413 | 请求体过大（练反射的样本超过 50MB） |
+| `NotFoundError` | 404 | 模型不存在（`model_not_found`） |
+| `RequestTooLargeError` | 413 | 请求体过大 |
 | `UnprocessableEntityError` | 422 | 请求校验失败（选项过多、超出 token 上限等） |
 | `RateLimitError` | 429 | 超出速率限制（`.retry_after` 为建议等待秒数） |
 | `OverloadedError` | 529 | 服务过载，稍后重试 |
@@ -234,7 +200,7 @@ logging.getLogger("xiangxin").setLevel(logging.INFO)
 |---|---|---|
 | `XIANGXIN_API_KEY` | API 密钥（必填） | — |
 | `XIANGXIN_BASE_URL` | API 根地址 | `https://api.xiangxinai.cn` |
-| `XIANGXIN_DEFAULT_MODEL` | 默认模型 | `xiangxin-s1-latest` |
+| `XIANGXIN_DEFAULT_MODEL` | 默认模型 | `xiangxin-latest` |
 | `XIANGXIN_LOG` | 日志级别 | 不设置 |
 
 显式传入的参数优先于环境变量。

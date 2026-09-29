@@ -5,8 +5,6 @@ Public constants: environment variable names and client defaults.
 
 from __future__ import annotations
 
-import re
-
 API_KEY_ENV = "XIANGXIN_API_KEY"
 """API 密钥所在的环境变量。 / Environment variable holding the API key."""
 
@@ -25,46 +23,17 @@ Logging level environment variable (debug/info/warning/error/off), applied once 
 DEFAULT_BASE_URL = "https://api.xiangxinai.cn"
 """默认 API 根地址。 / Default API root URL."""
 
-DEFAULT_MODEL = "xiangxin-s1-latest"
-"""默认模型名。 / Default model name."""
+DEFAULT_MODEL = "xiangxin-latest"
+"""默认模型名（别名，始终指向当前版本）。 / Default model name (alias of the current version)."""
 
 DEFAULT_TIMEOUT = 120.0  # 长 state（32k token）+ 多问题的请求可达约 60 秒
 """单次 HTTP 操作的默认超时（秒）。 / Default timeout per HTTP operation, in seconds."""
 
-REFLEX_CREATE_TIMEOUT = 300.0  # 练反射的请求体最大 50MB
-"""``reflexes.create`` 的最短超时（秒），上传大批样本需要更久。
-
-Minimum timeout for ``reflexes.create`` in seconds; large example uploads take longer.
-"""
-
-S1_MODEL = "xiangxin-s1"
-"""系统一模型（象信·系统一）的别名。 / Alias of the System One model (象信·系统一)."""
-
-REFLEX_MODEL = "xiangxin-reflex"
-"""基础条件反射模型的别名。 / Alias of the base reflex model."""
-
-_REFLEX_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
-
-
-def reflex_model(name: str) -> str:
-    """练出来的反射的模型名：``reflex_model("ticket-router")`` → ``"xiangxin-reflex:ticket-router"``。
-
-    Model name of a trained reflex, for the ``model`` argument of ``system_one``.
-
-    Raises:
-        ValueError: 名字不符合 ``^[a-z0-9][a-z0-9-]{0,62}$``。 / Invalid reflex name.
-    """
-    if not isinstance(name, str) or not _REFLEX_NAME_RE.match(name):
-        raise ValueError(
-            f"反射名须为小写字母、数字或连字符（1–63 个字符，不以连字符开头） / invalid reflex name: {name!r}"
-        )
-    return f"{REFLEX_MODEL}:{name}"
-
-
 REQUEST_ID_HEADER = "x-request-id"
+"""服务端返回的请求 ID 响应头。 / Response header carrying the request ID."""
+
 RETRY_COUNT_HEADER = "x-xiangxin-retry-count"
 """重试时附带的第几次重试（1 起），服务端据此区分首发与重试。 / Retry number sent on retries."""
-"""服务端返回的请求 ID 响应头。 / Response header carrying the request ID."""
 
 MODEL_MS_HEADER = "x-xiangxin-model-ms"
 """模型推理耗时（毫秒）响应头。 / Response header with model latency in ms."""
@@ -80,10 +49,6 @@ __all__ = [
     "DEFAULT_BASE_URL",
     "DEFAULT_MODEL",
     "DEFAULT_TIMEOUT",
-    "REFLEX_CREATE_TIMEOUT",
-    "S1_MODEL",
-    "REFLEX_MODEL",
-    "reflex_model",
     "REQUEST_ID_HEADER",
     "RETRY_COUNT_HEADER",
     "MODEL_MS_HEADER",

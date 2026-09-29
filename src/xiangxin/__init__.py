@@ -1,9 +1,9 @@
 """象信 AI 官方 Python SDK。 / Official Python SDK for 象信 AI.
 
-象信·系统一是一个"系统一"模型：给定状态（state）与一组带类型的问题
+象信（xiangxin）是一个"系统一"模型：给定状态（state）与一组带类型的问题
 （Noul 是非题 / Choice 单选题 / Score 打分题），一次前向即返回带校准概率的结构化答案。
 
-Xiangxin-1 is a "System One" model: given a state and typed questions
+Xiangxin is a "System One" model: given a state and typed questions
 (Noul / Choice / Score), it returns calibrated, structured answers in one forward pass.
 
 Example::
@@ -21,20 +21,13 @@ Example::
     )
     resp.answers["is_urgent"].noul
     resp.usage.input_tokens
-
-条件反射（``xiangxin-reflex``）是同一接口下的另一个模型家族：毫秒级、固定耗时，
-可以用 ``client.reflexes.create(...)`` 拿自己的标注数据练，再以 ``model=reflex_model(name)`` 调用。
-
-Reflexes (``xiangxin-reflex``) are a second model family behind the same API: millisecond,
-fixed-latency models you can train on your own labels with ``client.reflexes.create(...)``.
 """
 
 from . import constants
 from ._base import RawResponse
-from ._client import AsyncModels, AsyncReflexes, AsyncXiangxinClient, Models, Reflexes, XiangxinClient
+from ._client import AsyncModels, AsyncXiangxinClient, Models, XiangxinClient
 from ._logging import setup_logging_from_env
 from ._version import __version__
-from .constants import REFLEX_MODEL, S1_MODEL, reflex_model
 from .exceptions import (
     APIConnectionError,
     APIError,
@@ -51,7 +44,6 @@ from .exceptions import (
     RateLimitError,
     RequestTooLargeError,
     UnprocessableEntityError,
-    WaitTimeoutError,
     XiangxinError,
 )
 from .retries import RetryPolicy
@@ -71,14 +63,6 @@ from .types import (
     Question,
     QuestionDict,
     Questions,
-    REFLEX_FINAL_STATUSES,
-    Reflex,
-    ReflexEvaluation,
-    ReflexExample,
-    ReflexLabel,
-    ReflexMetrics,
-    ReflexQuestionMetrics,
-    ReflexStatus,
     Score,
     ScoreAnswer,
     ScoreDict,
@@ -97,8 +81,6 @@ __all__ = [
     "AsyncXiangxinClient",
     "Models",
     "AsyncModels",
-    "Reflexes",
-    "AsyncReflexes",
     "RawResponse",
     "RetryPolicy",
     # questions
@@ -124,18 +106,6 @@ __all__ = [
     "SystemOneResponse",
     "ModelInfo",
     "ListModelsResponse",
-    # reflexes
-    "S1_MODEL",
-    "REFLEX_MODEL",
-    "reflex_model",
-    "Reflex",
-    "ReflexMetrics",
-    "ReflexEvaluation",
-    "ReflexQuestionMetrics",
-    "ReflexExample",
-    "ReflexLabel",
-    "ReflexStatus",
-    "REFLEX_FINAL_STATUSES",
     # errors
     "XiangxinError",
     "APIError",
@@ -153,5 +123,4 @@ __all__ = [
     "APIResponseValidationError",
     "APIConnectionError",
     "APITimeoutError",
-    "WaitTimeoutError",
 ]
