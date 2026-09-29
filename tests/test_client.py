@@ -43,10 +43,10 @@ def test_env_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
     assert client.base_url == "https://api.xiangxinai.cn"
     assert client.model == "xiangxin-latest"
     monkeypatch.setenv("XIANGXIN_BASE_URL", BASE + "/")
-    monkeypatch.setenv("XIANGXIN_DEFAULT_MODEL", "xiangxin-preview")
+    monkeypatch.setenv("XIANGXIN_DEFAULT_MODEL", "xiangxin-2.0.0")
     client = XiangxinClient()
     assert client.base_url == BASE
-    assert client.model == "xiangxin-preview"
+    assert client.model == "xiangxin-2.0.0"
     # 显式参数优先 / explicit wins
     assert XiangxinClient(model="xiangxin-2.0.0").model == "xiangxin-2.0.0"
 
@@ -143,12 +143,12 @@ def test_mixed_questions_model_override_and_extra_body() -> None:
         client.system_one(
             ["第一条消息", "第二条消息"],
             {"a": Noul(instructions="x"), "b": {"type": "noul", "instructions": "y", "weight": 2}},
-            model="xiangxin-preview",
+            model="xiangxin-2.0.0",
             extra_body={"beam": 4},
             extra_headers={"Authorization": "Bearer hijack", "X-Extra": "1"},
         )
     body = body_of(route)
-    assert body["model"] == "xiangxin-preview"
+    assert body["model"] == "xiangxin-2.0.0"
     assert body["beam"] == 4
     assert body["questions"]["b"]["weight"] == 2  # 字典字段原样透传 / dict passthrough
     req = route.calls.last.request
@@ -255,16 +255,16 @@ def test_models_list() -> None:
             "models": [
                 {"name": "xiangxin-latest", "description": "最新正式版", "release_date": "2026-09-28"},
                 # 未知字段忽略，向前兼容 / unknown fields are ignored for forward compatibility
-                {"name": "xiangxin-preview", "description": "预览版", "release_date": "2026-09-28", "extra": 1},
+                {"name": "xiangxin-2.0.0", "description": "象信 2.0", "release_date": "2026-09-28", "extra": 1},
             ]
         },
     )
     with make_client() as client:
         result = client.models.list()
     assert isinstance(result, ListModelsResponse)
-    assert [m.name for m in result.models] == ["xiangxin-latest", "xiangxin-preview"]
+    assert [m.name for m in result.models] == ["xiangxin-latest", "xiangxin-2.0.0"]
     assert result.models[0].release_date == "2026-09-28"
-    assert result.models[1].description == "预览版"
+    assert result.models[1].description == "象信 2.0"
     assert route.calls.last.request.headers["authorization"] == f"Bearer {KEY}"
 
 

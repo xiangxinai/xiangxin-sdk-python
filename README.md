@@ -124,7 +124,6 @@ for m in client.models.list().models:
 | 模型 | 说明 |
 |---|---|
 | `xiangxin-latest` | 最新正式版，SDK 默认值 |
-| `xiangxin-preview` | 预览版；当前没有预览版，指向与 `xiangxin-latest` 相同的版本 |
 
 响应里的 `resp.model` 是实际使用的版本化 ID，如 `xiangxin-2.0.0`；需要固定版本时可直接传版本化 ID。可在创建客户端时指定 `model=`，或在单次调用时传入 `model=` 覆盖。
 
